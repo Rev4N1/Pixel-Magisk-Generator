@@ -1,7 +1,7 @@
 {
-	"name": "crosshatch",
-	"build_number": "SP1A.210812.015",
-	"link": "https://dl.google.com/dl/android/aosp/crosshatch-sp1a.210812.015-factory-6dae03f8.zip",
-	"checksum": "6dae03f8e91644f6ee0b9e872faaee2b43312c490f05934940c68074dced303a",
-	"magisk": "https://github.com/topjohnwu/Magisk/releases/download/v23.0/Magisk-v23.0.apk"
+	"name": "panther",
+	"build_number": "TQ1A.230105.001.A2",
+   	"link": "https://dl.google.com/dl/android/aosp/panther-tq1a.230105.001.a2-factory-264b1602.zip",
+   	"checksum": "264b1602f8f2afdd974500ff11835a28176fa35d8168443a05206576d94dc982",
+   	"magisk": "https://github.com/topjohnwu/Magisk/releases/download/v25.2/Magisk-v25.2.apk"
 }
