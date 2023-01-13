@@ -1,0 +1,232 @@
+name: Build Image
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - image_info.json
+permissions: write-all
+
+jobs:
+  prerequisites:
+    name: Prepare Magisk Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Get Magisk link
+        id: magisk
+        uses: notiz-dev/github-action-json-property@master
+        with:
+          path: 'image_info.json'
+          prop_path: 'magisk'
+
+      - name: Download patch script
+        uses: wei/wget@master
+        with:
+          args: https://raw.githubusercontent.com/topjohnwu/Magisk/master/scripts/boot_patch.sh
+
+      - name: Download utility script
+        uses: wei/wget@master
+        with:
+          args: https://raw.githubusercontent.com/topjohnwu/Magisk/master/scripts/util_functions.sh
+
+      - name: Download addon.d script
+        uses: wei/wget@master
+        with:
+          args: https://raw.githubusercontent.com/topjohnwu/Magisk/master/scripts/addon.d.sh
+
+      - name: Download Magisk app
+        uses: wei/wget@master
+        with:
+          args: -O Magisk.apk ${{steps.magisk.outputs.prop}}
+
+      - name: Upload Magisk app to artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: magiskapp
+          path: ./Magisk.apk
+
+      - name: Upload patch script to artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: boot_patch
+          path: ./boot_patch.sh
+
+      - name: Upload utility script to artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: util_functions
+          path: ./util_functions.sh
+
+      - name: Upload addon.d script to artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: addond
+          path: ./addon.d.sh
+
+  factory_image:
+    name: Get Factory Image and Extract Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Get factory image link
+        id: link
+        uses: notiz-dev/github-action-json-property@master
+        with:
+          path: 'image_info.json'
+          prop_path: 'link'
+
+      - name: Download factory image
+        uses: wei/wget@master
+        with:
+          args: -O factory_image.zip ${{steps.link.outputs.prop}}
+
+      - name: Get image build number
+        id: build_no
+        uses: notiz-dev/github-action-json-property@master
+        with:
+          path: 'image_info.json'
+          prop_path: 'build_number'
+
+      - name: Unzip factory image
+        run: |
+            mkdir factory_image
+            unzip factory_image.zip -d factory_image
+
+      - name: Extract image
+        run: |
+            rm factory_image.zip
+            export FOLDER_NAME=$(ls -h factory_image/ | grep -i ${{steps.build_no.outputs.prop}})
+            echo "FOLDER_NAME=${FOLDER_NAME}" >> $GITHUB_ENV
+            unzip factory_image/"${FOLDER_NAME}/image-${FOLDER_NAME}.zip"
+
+      - name: Check init_boot
+        id: check_init_boot
+        uses: andstor/file-existence-action@main
+        with:
+          files: "init_boot.img"
+
+      - name: Use boot_init
+        if: steps.check_init_boot.outputs.files_exists == 'true'
+        run: |
+            rm boot.img
+            mv init_boot.img boot.img
+
+      - name: Upload image to artifacts
+        uses: actions/upload-artifact@main
+        with:
+          name: img_unpatched
+          path: ./boot.img
+
+  patch_img:
+    name: Gather Files and Start Patching
+    needs: [prerequisites, factory_image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Get Magisk app from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: magiskapp
+
+      - name: Get boot script from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: boot_patch
+
+      - name: Get utility function script from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: util_functions
+
+      - name: Get addon.d script from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: addond
+
+      - name: Get boot image from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: img_unpatched
+
+      - name: Unzip files
+        run: |
+            cp Magisk.apk Magisk.zip
+            mkdir magisk_unzipped
+            unzip Magisk.zip -d magisk_unzipped/
+
+      - uses: uraimo/run-on-arch-action@master
+        name: Get aarch64 machine and patch
+        id: armcmd
+        with:
+          arch: aarch64
+          distro: ubuntu20.04
+          shell: /bin/bash
+
+          run: |
+              apt-get update
+              apt-get install dos2unix -y
+              cp magisk_unzipped/lib/arm64-v8a/libmagiskinit.so ./magiskinit
+              cp magisk_unzipped/lib/arm64-v8a/libmagiskboot.so ./magiskboot
+              cp magisk_unzipped/lib/arm64-v8a/libmagisk64.so ./magisk64
+              chmod +x boot_patch.sh
+              chmod +x util_functions.sh
+              chmod +x get_property.sh
+              sed -i '1c\#!/bin/bash' boot_patch.sh
+              echo ::set-output name=result::$(bash -c 'source ./get_property.sh && ./boot_patch.sh boot.img')
+              ## For When Deprecated
+              ## echo "result=${(bash -c 'source ./get_property.sh && ./boot_patch.sh boot.img')}" >> $GITHUB_OUTPUT
+              echo $(bash -c 'source ./get_property.sh && getprop ro.crypto.state')
+
+      - name: Upload patched image
+        uses: actions/upload-artifact@main
+        with:
+          name: img_patched
+          path: ./new-boot.img
+
+  release_img:
+    name: Deploy to Releases
+    needs: patch_img
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+
+      - name: Get image from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: img_unpatched
+
+      - name: Get patched image from artifacts
+        uses: actions/download-artifact@main
+        with:
+          name: img_patched
+
+      - name: Get device name
+        id: device_name
+        uses: notiz-dev/github-action-json-property@master
+        with:
+          path: 'image_info.json'
+          prop_path: 'name'
+
+      - name: Get image build number
+        id: build_no
+        uses: notiz-dev/github-action-json-property@master
+        with:
+          path: 'image_info.json'
+          prop_path: 'build_number'
+
+      - name: Rename files
+        run: |
+            mv new-boot.img image_magisk_patched.img
+            mv boot.img image_original.img
+
+      - name: Upload images to release
+        uses: svenstaro/upload-release-action@master
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: image*.img
+          tag: ${{ steps.device_name.outputs.prop }}-${{ steps.build_no.outputs.prop }}
+          file_glob: true
