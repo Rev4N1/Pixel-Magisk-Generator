@@ -1,7 +1,7 @@
 {
 	"name": "panther",
-	"build_number": "TQ1A.230105.001.A2",
-   	"link": "https://dl.google.com/dl/android/aosp/panther-tq1a.230105.001.a2-factory-264b1602.zip",
-   	"checksum": "264b1602f8f2afdd974500ff11835a28176fa35d8168443a05206576d94dc982",
+	"build_number": "TQ1A.230205.002",
+   	"link": "https://dl.google.com/dl/android/aosp/panther-tq1a.230205.002-factory-d504ff3a.zip",
+   	"checksum": "d504ff3a0aa586e6f1dbab904b597d6441c9e83a864673b359ce0d00163f586e",
    	"magisk": "https://github.com/topjohnwu/Magisk/releases/download/v25.2/Magisk-v25.2.apk"
 }
